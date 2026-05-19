@@ -64,7 +64,41 @@ options:
                         You can specify several, separated by commas. Example: -b 135501350,135501360 or
                         --blacklist 135501350,some_hash
   -v, --verbose         increase output verbosity to DEBUG
+  --match_local         auto-detect local `solana --version` and filter cluster
+                        nodes by matching both semver AND featureSet (uniquely
+                        identifies the same client build, e.g. JitoLabs vs
+                        Agave 4.0.0). Overrides --version. For semver-only
+                        match, use --version X.Y.Z manually instead.
 ```
+
+### Match local validator version (`--match_local`)
+
+When the script is run with `--match_local`, it executes `solana --version` and parses:
+
+- the local validator's semver (e.g. `4.0.0`),
+- its feature-set fingerprint (e.g. `feat:dda54cf7` → integer `3718597879`),
+- its client name (e.g. `JitoLabs`).
+
+It then filters all cluster nodes returned by `getClusterNodes` to only those that report **both** the same `version` string **AND** the same `featureSet` integer. This is stricter than `--version` alone, because two different client builds (e.g. Jito-Solana 4.0.0 and Agave 4.0.0) share the same semver but advertise different feature-sets — `--version 4.0.0` would accept both, while `--match_local` keeps only the build that matches your local binary.
+
+Example:
+
+```bash
+python3 snapshot-finder.py --match_local --snapshot_path $HOME/solana/validator-ledger
+```
+
+Sample log output on startup:
+
+```
+match_local: solana-cli=4.0.0, feature-set=3718597879 (0xdda54cf7), client=JitoLabs
+...
+DISCARDED_BY_VERSION=N | DISCARDED_BY_FEATURE_SET=M | ...
+```
+
+Notes:
+
+- If `solana` is not on `PATH`, the filter is silently skipped and the script continues as if `--match_local` was not specified.
+- If the pool of matching nodes is too small (e.g. you are on a build with few peers), fall back to `--version X.Y.Z` for a looser semver-only match.
 ![alt text](https://raw.githubusercontent.com/c29r3/solana-snapshot-finder/aec9a59a7517a5049fa702675bdc8c770acbef99/2021-07-23_22-38.png?raw=true)
 
 ### Without docker   
