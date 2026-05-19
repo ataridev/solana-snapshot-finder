@@ -9,6 +9,7 @@ import sys
 import argparse
 import logging
 import subprocess
+import re
 from pathlib import Path
 from requests import ReadTimeout, ConnectTimeout, HTTPError, Timeout, ConnectionError
 from tqdm import tqdm
@@ -45,6 +46,10 @@ parser.add_argument('-b', '--blacklist', default='', type=str, help='If the same
                     ' Specify either the number of the slot you want to exclude, or the hash of the archive name. '
                     'You can specify several, separated by commas. Example: -b 135501350,135501360 or --blacklist 135501350,some_hash')
 parser.add_argument("-v", "--verbose", help="increase output verbosity to DEBUG", action="store_true")
+parser.add_argument("--match_local", action="store_true",
+    help="auto-detect local `solana --version` and filter cluster nodes by matching both "
+         "semver AND featureSet (uniquely identifies the same client build, e.g. JitoLabs vs Agave). "
+         "Overrides --version. To match by semver only, use --version X.Y.Z manually instead.")
 args = parser.parse_args()
 
 DEFAULT_HEADERS = {"Content-Type": "application/json"}
@@ -52,6 +57,30 @@ RPC = args.rpc_address
 SPECIFIC_SLOT = int(args.slot)
 SPECIFIC_VERSION = args.version
 WILDCARD_VERSION = args.wildcard_version
+LOCAL_FEATSET = None
+
+if args.match_local:
+    try:
+        _out = subprocess.check_output(['solana', '--version'], text=True, timeout=5,
+                                       stderr=subprocess.STDOUT)
+        _semver = re.search(r'solana-cli\s+(\S+)', _out)
+        _feat   = re.search(r'feat:([0-9a-fA-F]+)', _out)
+        _client = re.search(r'client:([A-Za-z0-9_+\-]+)', _out)
+        if _semver:
+            SPECIFIC_VERSION = _semver.group(1)
+        if _feat:
+            LOCAL_FEATSET = int(_feat.group(1), 16)
+        print(f'match_local: solana-cli={SPECIFIC_VERSION}, '
+              f'feature-set={LOCAL_FEATSET} '
+              f'({"0x{:x}".format(LOCAL_FEATSET) if LOCAL_FEATSET is not None else "?"}), '
+              f'client={_client.group(1) if _client else "?"}')
+        if SPECIFIC_VERSION is None:
+            print('match_local: failed to parse `solana --version` output, filter disabled')
+    except FileNotFoundError:
+        print('match_local: `solana` binary not found on PATH, filter disabled')
+    except Exception as _e:
+        print(f'match_local: failed to run `solana --version`: {_e}, filter disabled')
+
 MAX_SNAPSHOT_AGE_IN_SLOTS = args.max_snapshot_age
 WITH_PRIVATE_RPC = args.with_private_rpc
 THREADS_COUNT = args.threads_count
@@ -73,6 +102,7 @@ DISCARDED_BY_ARCHIVE_TYPE = 0
 DISCARDED_BY_LATENCY = 0
 DISCARDED_BY_SLOT = 0
 DISCARDED_BY_VERSION = 0
+DISCARDED_BY_FEATURE_SET = 0
 DISCARDED_BY_UNKNW_ERR = 0
 DISCARDED_BY_TIMEOUT = 0
 FULL_LOCAL_SNAPSHOTS = []
@@ -191,7 +221,7 @@ def get_current_slot():
 
 
 def get_all_rpc_ips():
-    global DISCARDED_BY_VERSION
+    global DISCARDED_BY_VERSION, DISCARDED_BY_FEATURE_SET
 
     logger.debug("get_all_rpc_ips()")
     d = '{"jsonrpc":"2.0", "id":1, "method":"getClusterNodes"}'
@@ -202,6 +232,9 @@ def get_all_rpc_ips():
             if (WILDCARD_VERSION is not None and node["version"] and WILDCARD_VERSION not in node["version"]) or \
                (SPECIFIC_VERSION is not None and node["version"] and node["version"] != SPECIFIC_VERSION):
                 DISCARDED_BY_VERSION += 1
+                continue
+            if LOCAL_FEATSET is not None and node.get("featureSet") != LOCAL_FEATSET:
+                DISCARDED_BY_FEATURE_SET += 1
                 continue
             if node["rpc"] is not None:
                 rpc_ips.append(node["rpc"])
@@ -367,7 +400,7 @@ def main_worker():
         logger.info(f'The following information shows for what reason and how many RPCs were skipped.'
         f'Timeout most probably mean, that node RPC port does not respond (port is closed)\n'
         f'{DISCARDED_BY_ARCHIVE_TYPE=} | {DISCARDED_BY_LATENCY=} |'
-        f' {DISCARDED_BY_SLOT=} | {DISCARDED_BY_VERSION=} | {DISCARDED_BY_TIMEOUT=} | {DISCARDED_BY_UNKNW_ERR=}')
+        f' {DISCARDED_BY_SLOT=} | {DISCARDED_BY_VERSION=} | {DISCARDED_BY_FEATURE_SET=} | {DISCARDED_BY_TIMEOUT=} | {DISCARDED_BY_UNKNW_ERR=}')
 
         if len(json_data["rpc_nodes"]) == 0:
             logger.info(f'No snapshot nodes were found matching the given parameters: {args.max_snapshot_age=}')
