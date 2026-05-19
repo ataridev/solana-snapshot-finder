@@ -476,7 +476,7 @@ def main_worker():
             else:
                 logger.info(f'{down_speed_mb=} < {MIN_DOWNLOAD_SPEED_MB=}')
 
-        if best_snapshot_node is {}:
+        if not best_snapshot_node:
             logger.error(f'No snapshot nodes were found matching the given parameters:{args.min_download_speed=}'
                   f'\nTry restarting the script with --with_private_rpc'
                   f'RETRY #{NUM_OF_ATTEMPTS}\\{NUM_OF_MAX_ATTEMPTS}')
@@ -487,7 +487,7 @@ def main_worker():
     except KeyboardInterrupt:
         sys.exit('\nKeyboardInterrupt - ctrl + c')
 
-    except:
+    except Exception:
         return 1
 
 
