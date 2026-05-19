@@ -6,20 +6,18 @@ Also check online public RPC finder - https://solana.rpc-finder.com/
 ## Navigation  
 
 * [Description](#what-exactly-does-the-script-do)
-* [Getting Started]()
-    - [Using docker](#run-via-docker)  
-    - [Without docker](#without-docker)  
+* Getting Started
+    - [Without docker](#without-docker)
+    - [Using docker](#run-via-docker)
 * [How to update](#update)
 
-## What exactly does the script do:  
-1. Finds all available RPCs  
-2. Get the number of the current slot  
-3. In multi-threaded mode, checks the slot numbers of all snapshots on all RPCs  
-*Starting from version 0.1.3, only the first 10 RPCs speed are tested in a loop. [See details here](https://github.com/c29r3/solana-snapshot-finder/releases/tag/0.1.3)
-5. List of RPCs sorted by lowest latency
-`slots_diff = current_slot - snapshot_slot`
-5. Checks the download speed from RPC with the most recent snapshot. If `download_speed <min_download_speed`, then it checks the speed at the next node.  
-6. Download snapshot  
+## What exactly does the script do:
+1. Finds all available RPCs.
+2. Gets the number of the current slot.
+3. In multi-threaded mode, checks the slot numbers of all snapshots on all RPCs. Only the top 10 RPCs by speed are tested in a loop.
+4. Sorts the list of RPCs by lowest latency (`slots_diff = current_slot - snapshot_slot`).
+5. Checks the download speed from the RPC with the most recent snapshot. If `download_speed < min_download_speed`, moves on to the next node.
+6. Downloads the snapshot.
 ```bash
 options:
   -h, --help            show this help message and exit
@@ -99,14 +97,13 @@ Notes:
 
 - If `solana` is not on `PATH`, the filter is silently skipped and the script continues as if `--match_local` was not specified.
 - If the pool of matching nodes is too small (e.g. you are on a build with few peers), fall back to `--version X.Y.Z` for a looser semver-only match.
-![alt text](https://raw.githubusercontent.com/c29r3/solana-snapshot-finder/aec9a59a7517a5049fa702675bdc8c770acbef99/2021-07-23_22-38.png?raw=true)
 
-### Without docker   
+### Without docker
 Install requirements  
 ```bash
 sudo apt-get update \
 && sudo apt-get install python3-venv git -y \
-&& git clone https://github.com/c29r3/solana-snapshot-finder.git \
+&& git clone https://github.com/ataridev/solana-snapshot-finder.git \
 && cd solana-snapshot-finder \
 && python3 -m venv venv \
 && source ./venv/bin/activate \
@@ -125,28 +122,49 @@ TdS
 python3 snapshot-finder.py --snapshot_path $HOME/solana/validator-ledger -r http://api.testnet.solana.com
 ``` 
 
-### Run via docker  
-Mainnet  
-```bash
-sudo docker pull c29r3/solana-snapshot-finder:latest; \
-sudo docker run -it --rm \
--v ~/solana/validator-ledger:/solana/snapshot \
---user $(id -u):$(id -g) \
-c29r3/solana-snapshot-finder:latest \
---snapshot_path /solana/snapshot
-```
-*`~/solana/validator-ledger` - path to validator-ledger, where snapshots stored*
+### Run via docker
 
-TdS  
+Build the image locally from the included `Dockerfile`:
+
 ```bash
-sudo docker pull c29r3/solana-snapshot-finder:latest; \
-sudo docker run -it --rm \
--v ~/solana/validator-ledger:/solana/snapshot \
---user $(id -u):$(id -g) \
-c29r3/solana-snapshot-finder:latest \
---snapshot_path /solana/snapshot \
--r http://api.testnet.solana.com
+git clone https://github.com/ataridev/solana-snapshot-finder.git
+cd solana-snapshot-finder
+sudo docker build -t solana-snapshot-finder .
 ```
 
-## Update  
-`sudo docker pull c29r3/solana-snapshot-finder:latest`
+Mainnet:
+
+```bash
+sudo docker run -it --rm \
+  -v ~/solana/validator-ledger:/solana/snapshot \
+  --user $(id -u):$(id -g) \
+  solana-snapshot-finder \
+  --snapshot_path /solana/snapshot
+```
+
+*`~/solana/validator-ledger`* — path to your `validator-ledger`, where snapshots are stored.
+
+Testnet:
+
+```bash
+sudo docker run -it --rm \
+  -v ~/solana/validator-ledger:/solana/snapshot \
+  --user $(id -u):$(id -g) \
+  solana-snapshot-finder \
+  --snapshot_path /solana/snapshot \
+  -r http://api.testnet.solana.com
+```
+
+## Update
+
+For a non-docker checkout:
+
+```bash
+cd solana-snapshot-finder && git pull
+```
+
+For docker:
+
+```bash
+cd solana-snapshot-finder && git pull && sudo docker build -t solana-snapshot-finder .
+```
